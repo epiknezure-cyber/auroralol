@@ -1,0 +1,329 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { resolveStorageUrl } from "@/lib/storage";
+import { Plus, Trash2, LogOut, ExternalLink, Upload } from "lucide-react";
+
+export const Route = createFileRoute("/dashboard")({
+  ssr: false,
+  component: Dashboard,
+});
+
+type Profile = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  discord_id: string | null;
+  roblox_url: string | null;
+  music_url: string | null;
+  music_title: string | null;
+  accent_color: string;
+  secondary_color: string;
+  background_effect: string;
+  click_effect: boolean;
+  custom_cursor: boolean;
+};
+type Lnk = { id: string; label: string; url: string; icon: string | null; position: number };
+
+const BG_OPTIONS = [
+  { id: "particles", label: "Particles" },
+  { id: "aurora", label: "Aurora" },
+  { id: "none", label: "None" },
+];
+
+function Dashboard() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [links, setLinks] = useState<Lnk[]>([]);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [musicPath, setMusicPath] = useState<string>("");
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { navigate({ to: "/auth" }); return; }
+      const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (!p) { toast.error("Profile not found"); setLoading(false); return; }
+      const { data: ls } = await supabase.from("links").select("*").eq("profile_id", user.id).order("position");
+      setProfile(p as Profile);
+      setLinks((ls || []) as Lnk[]);
+      setMusicPath(p.music_url || "");
+      resolveStorageUrl("avatars", p.avatar_url).then(setAvatarPreview);
+      setLoading(false);
+    })();
+  }, [navigate]);
+
+  const save = async () => {
+    if (!profile) return;
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({
+      display_name: profile.display_name,
+      bio: profile.bio,
+      discord_id: profile.discord_id,
+      roblox_url: profile.roblox_url,
+      music_url: musicPath || null,
+      music_title: profile.music_title,
+      accent_color: profile.accent_color,
+      secondary_color: profile.secondary_color,
+      background_effect: profile.background_effect,
+      click_effect: profile.click_effect,
+      custom_cursor: profile.custom_cursor,
+    }).eq("id", profile.id);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Saved");
+  };
+
+  const uploadAvatar = async (file: File) => {
+    if (!profile) return;
+    if (file.size > 4 * 1024 * 1024) return toast.error("Max 4MB");
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${profile.id}/avatar.${ext}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, contentType: file.type });
+    if (error) return toast.error(error.message);
+    await supabase.from("profiles").update({ avatar_url: path }).eq("id", profile.id);
+    setProfile({ ...profile, avatar_url: path });
+    resolveStorageUrl("avatars", path).then(setAvatarPreview);
+    toast.success("Avatar updated");
+  };
+
+  const uploadMusic = async (file: File) => {
+    if (!profile) return;
+    if (file.size > 10 * 1024 * 1024) return toast.error("Max 10MB");
+    const ext = file.name.split(".").pop() || "mp3";
+    const path = `${profile.id}/track.${ext}`;
+    const { error } = await supabase.storage.from("music").upload(path, file, { upsert: true, contentType: file.type });
+    if (error) return toast.error(error.message);
+    setMusicPath(path);
+    if (profile && !profile.music_title) setProfile({ ...profile, music_title: file.name.replace(/\.[^.]+$/, "") });
+    toast.success("Music uploaded — hit save");
+  };
+
+  const addLink = async () => {
+    if (!profile) return;
+    const { data, error } = await supabase.from("links").insert({
+      profile_id: profile.id, label: "New link", url: "https://", position: links.length,
+    }).select().single();
+    if (error) return toast.error(error.message);
+    setLinks([...links, data as Lnk]);
+  };
+
+  const updateLink = async (id: string, patch: Partial<Lnk>) => {
+    setLinks(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
+  };
+  const flushLink = async (l: Lnk) => {
+    await supabase.from("links").update({ label: l.label, url: l.url }).eq("id", l.id);
+  };
+  const removeLink = async (id: string) => {
+    await supabase.from("links").delete().eq("id", id);
+    setLinks(ls => ls.filter(l => l.id !== id));
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    navigate({ to: "/" });
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center font-mono text-muted-foreground">loading...</div>;
+  }
+  if (!profile) return null;
+
+  return (
+    <div className="min-h-screen">
+      <header className="border-b border-border/40">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link to="/" className="font-mono font-bold text-aurora">aurora.lol</Link>
+          <div className="flex items-center gap-2">
+            <Link to="/$username" params={{ username: profile.username }} target="_blank"
+                  className="glass-strong px-3 py-1.5 rounded-md text-sm flex items-center gap-1.5 hover:glow-purple transition-shadow">
+              View <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+            <button onClick={signOut} className="glass-strong px-3 py-1.5 rounded-md text-sm flex items-center gap-1.5">
+              <LogOut className="w-3.5 h-3.5" /> Sign out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-8 grid lg:grid-cols-[1fr_320px] gap-6">
+        <div className="space-y-6">
+          {/* Identity */}
+          <Section title="// IDENTITY">
+            <div className="flex gap-4">
+              <label className="shrink-0 cursor-pointer group">
+                <div className="w-20 h-20 rounded-full p-0.5"
+                     style={{ background: `linear-gradient(135deg, ${profile.accent_color}, ${profile.secondary_color})` }}>
+                  {avatarPreview ? (
+                    <img src={avatarPreview} className="w-full h-full rounded-full object-cover bg-background" alt="" />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-background flex items-center justify-center font-bold">
+                      {profile.username[0].toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <input type="file" accept="image/*" className="hidden"
+                       onChange={e => e.target.files?.[0] && uploadAvatar(e.target.files[0])} />
+                <div className="text-[10px] text-center mt-1 font-mono text-muted-foreground group-hover:text-foreground">change</div>
+              </label>
+              <div className="flex-1 space-y-2">
+                <Field label="Username (locked)">
+                  <input value={profile.username} disabled
+                         className="w-full bg-input/50 rounded-md px-3 py-2 text-sm border border-border font-mono" />
+                </Field>
+                <Field label="Display name">
+                  <input value={profile.display_name ?? ""} onChange={e => setProfile({ ...profile, display_name: e.target.value })}
+                         className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
+                </Field>
+              </div>
+            </div>
+            <Field label="Bio">
+              <textarea value={profile.bio ?? ""} onChange={e => setProfile({ ...profile, bio: e.target.value })} rows={3} maxLength={300}
+                        className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border resize-none" />
+            </Field>
+          </Section>
+
+          {/* Integrations */}
+          <Section title="// INTEGRATIONS">
+            <Field label="Discord ID (for Lanyard live status)">
+              <input value={profile.discord_id ?? ""} onChange={e => setProfile({ ...profile, discord_id: e.target.value })}
+                     placeholder="e.g. 156114103033790464"
+                     className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border font-mono" />
+              <p className="text-xs text-muted-foreground mt-1">Join discord.gg/lanyard for live status to work.</p>
+            </Field>
+            <Field label="Roblox profile URL">
+              <input value={profile.roblox_url ?? ""} onChange={e => setProfile({ ...profile, roblox_url: e.target.value })}
+                     placeholder="https://roblox.com/users/123/profile"
+                     className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
+            </Field>
+          </Section>
+
+          {/* Music */}
+          <Section title="// MUSIC">
+            <Field label="Track title">
+              <input value={profile.music_title ?? ""} onChange={e => setProfile({ ...profile, music_title: e.target.value })}
+                     className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
+            </Field>
+            <Field label="Audio URL or upload">
+              <input value={musicPath} onChange={e => setMusicPath(e.target.value)}
+                     placeholder="https://... or upload below"
+                     className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border font-mono text-xs" />
+            </Field>
+            <label className="inline-flex items-center gap-2 glass-strong rounded-md px-3 py-2 text-sm cursor-pointer hover:glow-purple transition-shadow">
+              <Upload className="w-4 h-4" /> Upload MP3
+              <input type="file" accept="audio/*" className="hidden"
+                     onChange={e => e.target.files?.[0] && uploadMusic(e.target.files[0])} />
+            </label>
+          </Section>
+
+          {/* Links */}
+          <Section title="// LINKS">
+            <div className="space-y-2">
+              {links.map((l) => (
+                <div key={l.id} className="flex gap-2">
+                  <input value={l.label} onChange={e => updateLink(l.id, { label: e.target.value })} onBlur={() => flushLink(l)}
+                         placeholder="Label"
+                         className="w-1/3 bg-input rounded-md px-3 py-2 text-sm border border-border" />
+                  <input value={l.url} onChange={e => updateLink(l.id, { url: e.target.value })} onBlur={() => flushLink(l)}
+                         placeholder="https://"
+                         className="flex-1 bg-input rounded-md px-3 py-2 text-sm border border-border font-mono text-xs" />
+                  <button onClick={() => removeLink(l.id)} className="text-destructive px-2 hover:bg-destructive/10 rounded">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button onClick={addLink}
+                      className="w-full glass-strong rounded-md py-2 text-sm flex items-center justify-center gap-1.5 hover:glow-purple transition-shadow">
+                <Plus className="w-4 h-4" /> Add link
+              </button>
+            </div>
+          </Section>
+        </div>
+
+        {/* Customization sidebar */}
+        <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+          <Section title="// CUSTOMIZE">
+            <Field label="Accent color">
+              <ColorRow value={profile.accent_color} onChange={c => setProfile({ ...profile, accent_color: c })} />
+            </Field>
+            <Field label="Secondary color">
+              <ColorRow value={profile.secondary_color} onChange={c => setProfile({ ...profile, secondary_color: c })} />
+            </Field>
+            <Field label="Background effect">
+              <div className="grid grid-cols-3 gap-1.5">
+                {BG_OPTIONS.map(o => (
+                  <button key={o.id} onClick={() => setProfile({ ...profile, background_effect: o.id })}
+                          className={`rounded-md px-2 py-2 text-xs font-mono border transition-all ${
+                            profile.background_effect === o.id ? "border-primary glow-purple" : "border-border bg-input"}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Toggle label="Click burst" checked={profile.click_effect} onChange={v => setProfile({ ...profile, click_effect: v })} />
+            <Toggle label="Custom cursor" checked={profile.custom_cursor} onChange={v => setProfile({ ...profile, custom_cursor: v })} />
+          </Section>
+
+          <button onClick={save} disabled={saving}
+                  className="w-full rounded-lg py-3 font-medium animate-pulse-glow"
+                  style={{ background: "var(--grad-aurora)", color: "white" }}>
+            {saving ? "Saving..." : "Save changes"}
+          </button>
+        </aside>
+      </main>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="glass p-5 space-y-3">
+      <h2 className="font-mono text-xs tracking-wider opacity-70">{title}</h2>
+      {children}
+    </section>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="text-xs font-mono text-muted-foreground mb-1">{label}</div>
+      {children}
+    </label>
+  );
+}
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button onClick={() => onChange(!checked)} className="w-full flex items-center justify-between text-sm py-1">
+      <span>{label}</span>
+      <span className={`w-9 h-5 rounded-full p-0.5 transition-all ${checked ? "" : "bg-muted"}`}
+            style={checked ? { background: "var(--grad-aurora)" } : undefined}>
+        <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-4" : ""}`} />
+      </span>
+    </button>
+  );
+}
+function ColorRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const PRESETS = ["#a855f7", "#22c55e", "#ec4899", "#06b6d4", "#f59e0b", "#ef4444"];
+  return (
+    <div className="flex items-center gap-2">
+      <input type="color" value={hexFromAny(value)} onChange={e => onChange(e.target.value)}
+             className="w-10 h-9 rounded cursor-pointer bg-transparent border border-border" />
+      <div className="flex gap-1 flex-1">
+        {PRESETS.map(p => (
+          <button key={p} onClick={() => onChange(p)}
+                  className="w-6 h-6 rounded-full border border-border hover:scale-110 transition-transform"
+                  style={{ background: p }} aria-label={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+function hexFromAny(v: string) {
+  if (v.startsWith("#")) return v;
+  return "#a855f7";
+}
