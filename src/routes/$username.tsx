@@ -130,7 +130,7 @@ function ProfilePage() {
 
         {links.length > 0 && (
           <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: "120ms" }}>
-            {links.map((l) => (
+            {links.map((l: Lnk) => (
               <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
                  className="glass flex items-center justify-between px-4 py-3 hover:glow-purple transition-all hover:-translate-y-0.5 group">
                 <span className="font-medium">{l.label}</span>
