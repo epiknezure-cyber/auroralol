@@ -55,57 +55,99 @@ export type Database = {
       profiles: {
         Row: {
           accent_color: string | null
+          animation_speed: number
+          avatar_shape: string
           avatar_url: string | null
           background_effect: string | null
+          background_image_url: string | null
+          background_opacity: number
           bio: string | null
+          border_glow: boolean
+          card_blur: number
+          card_opacity: number
           click_effect: boolean | null
+          click_effect_style: string
           created_at: string
+          cursor_trail: boolean
           custom_cursor: boolean | null
           discord_id: string | null
           display_name: string | null
+          entry_animation: string
+          font_family: string
           id: string
+          layout_style: string
           music_title: string | null
           music_url: string | null
           roblox_url: string | null
           secondary_color: string | null
+          tilt_cards: boolean
           updated_at: string
           username: string
+          view_count: number
         }
         Insert: {
           accent_color?: string | null
+          animation_speed?: number
+          avatar_shape?: string
           avatar_url?: string | null
           background_effect?: string | null
+          background_image_url?: string | null
+          background_opacity?: number
           bio?: string | null
+          border_glow?: boolean
+          card_blur?: number
+          card_opacity?: number
           click_effect?: boolean | null
+          click_effect_style?: string
           created_at?: string
+          cursor_trail?: boolean
           custom_cursor?: boolean | null
           discord_id?: string | null
           display_name?: string | null
+          entry_animation?: string
+          font_family?: string
           id: string
+          layout_style?: string
           music_title?: string | null
           music_url?: string | null
           roblox_url?: string | null
           secondary_color?: string | null
+          tilt_cards?: boolean
           updated_at?: string
           username: string
+          view_count?: number
         }
         Update: {
           accent_color?: string | null
+          animation_speed?: number
+          avatar_shape?: string
           avatar_url?: string | null
           background_effect?: string | null
+          background_image_url?: string | null
+          background_opacity?: number
           bio?: string | null
+          border_glow?: boolean
+          card_blur?: number
+          card_opacity?: number
           click_effect?: boolean | null
+          click_effect_style?: string
           created_at?: string
+          cursor_trail?: boolean
           custom_cursor?: boolean | null
           discord_id?: string | null
           display_name?: string | null
+          entry_animation?: string
+          font_family?: string
           id?: string
+          layout_style?: string
           music_title?: string | null
           music_url?: string | null
           roblox_url?: string | null
           secondary_color?: string | null
+          tilt_cards?: boolean
           updated_at?: string
           username?: string
+          view_count?: number
         }
         Relationships: []
       }
