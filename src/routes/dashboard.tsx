@@ -25,13 +25,59 @@ type Profile = {
   background_effect: string;
   click_effect: boolean;
   custom_cursor: boolean;
+  font_family: string;
+  layout_style: string;
+  card_opacity: number;
+  card_blur: number;
+  border_glow: boolean;
+  cursor_trail: boolean;
+  tilt_cards: boolean;
+  click_effect_style: string;
+  background_image_url: string | null;
+  background_opacity: number;
+  entry_animation: string;
+  avatar_shape: string;
+  animation_speed: number;
 };
 type Lnk = { id: string; label: string; url: string; icon: string | null; position: number };
 
 const BG_OPTIONS = [
   { id: "particles", label: "Particles" },
   { id: "aurora", label: "Aurora" },
+  { id: "stars", label: "Stars" },
+  { id: "grid", label: "Grid" },
+  { id: "matrix", label: "Matrix" },
+  { id: "mesh", label: "Mesh" },
   { id: "none", label: "None" },
+];
+const FONT_OPTIONS = [
+  { id: "space-grotesk", label: "Grotesk" },
+  { id: "mono", label: "Mono" },
+  { id: "serif", label: "Serif" },
+  { id: "system", label: "System" },
+];
+const LAYOUT_OPTIONS = [
+  { id: "classic", label: "Classic" },
+  { id: "wide", label: "Wide" },
+  { id: "grid", label: "Grid links" },
+];
+const CLICK_OPTIONS = [
+  { id: "burst", label: "Burst" },
+  { id: "ripple", label: "Ripple" },
+  { id: "sparkle", label: "Sparkle" },
+  { id: "heart", label: "Heart" },
+];
+const ANIM_OPTIONS = [
+  { id: "fade-up", label: "Fade up" },
+  { id: "fade-down", label: "Fade down" },
+  { id: "zoom", label: "Zoom" },
+  { id: "blur", label: "Blur" },
+  { id: "none", label: "None" },
+];
+const AVATAR_OPTIONS = [
+  { id: "circle", label: "Circle" },
+  { id: "square", label: "Square" },
+  { id: "hex", label: "Hex" },
 ];
 
 function Dashboard() {
@@ -58,6 +104,8 @@ function Dashboard() {
     })();
   }, [navigate]);
 
+  const patch = (p: Partial<Profile>) => setProfile(prev => prev ? { ...prev, ...p } : prev);
+
   const save = async () => {
     if (!profile) return;
     setSaving(true);
@@ -73,6 +121,19 @@ function Dashboard() {
       background_effect: profile.background_effect,
       click_effect: profile.click_effect,
       custom_cursor: profile.custom_cursor,
+      font_family: profile.font_family,
+      layout_style: profile.layout_style,
+      card_opacity: profile.card_opacity,
+      card_blur: profile.card_blur,
+      border_glow: profile.border_glow,
+      cursor_trail: profile.cursor_trail,
+      tilt_cards: profile.tilt_cards,
+      click_effect_style: profile.click_effect_style,
+      background_image_url: profile.background_image_url,
+      background_opacity: profile.background_opacity,
+      entry_animation: profile.entry_animation,
+      avatar_shape: profile.avatar_shape,
+      animation_speed: profile.animation_speed,
     }).eq("id", profile.id);
     setSaving(false);
     if (error) return toast.error(error.message);
@@ -87,9 +148,20 @@ function Dashboard() {
     const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, contentType: file.type });
     if (error) return toast.error(error.message);
     await supabase.from("profiles").update({ avatar_url: path }).eq("id", profile.id);
-    setProfile({ ...profile, avatar_url: path });
+    patch({ avatar_url: path });
     resolveStorageUrl("avatars", path).then(setAvatarPreview);
     toast.success("Avatar updated");
+  };
+
+  const uploadBackground = async (file: File) => {
+    if (!profile) return;
+    if (file.size > 6 * 1024 * 1024) return toast.error("Max 6MB");
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${profile.id}/background.${ext}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, contentType: file.type });
+    if (error) return toast.error(error.message);
+    patch({ background_image_url: path });
+    toast.success("Background uploaded — hit save");
   };
 
   const uploadMusic = async (file: File) => {
@@ -100,7 +172,7 @@ function Dashboard() {
     const { error } = await supabase.storage.from("music").upload(path, file, { upsert: true, contentType: file.type });
     if (error) return toast.error(error.message);
     setMusicPath(path);
-    if (profile && !profile.music_title) setProfile({ ...profile, music_title: file.name.replace(/\.[^.]+$/, "") });
+    if (profile && !profile.music_title) patch({ music_title: file.name.replace(/\.[^.]+$/, "") });
     toast.success("Music uploaded — hit save");
   };
 
@@ -112,9 +184,8 @@ function Dashboard() {
     if (error) return toast.error(error.message);
     setLinks([...links, data as Lnk]);
   };
-
-  const updateLink = async (id: string, patch: Partial<Lnk>) => {
-    setLinks(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
+  const updateLink = async (id: string, p: Partial<Lnk>) => {
+    setLinks(ls => ls.map(l => l.id === id ? { ...l, ...p } : l));
   };
   const flushLink = async (l: Lnk) => {
     await supabase.from("links").update({ label: l.label, url: l.url }).eq("id", l.id);
@@ -151,7 +222,7 @@ function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 grid lg:grid-cols-[1fr_320px] gap-6">
+      <main className="max-w-5xl mx-auto px-4 py-8 grid lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-6">
           {/* Identity */}
           <Section title="// IDENTITY">
@@ -177,13 +248,13 @@ function Dashboard() {
                          className="w-full bg-input/50 rounded-md px-3 py-2 text-sm border border-border font-mono" />
                 </Field>
                 <Field label="Display name">
-                  <input value={profile.display_name ?? ""} onChange={e => setProfile({ ...profile, display_name: e.target.value })}
+                  <input value={profile.display_name ?? ""} onChange={e => patch({ display_name: e.target.value })}
                          className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
                 </Field>
               </div>
             </div>
             <Field label="Bio">
-              <textarea value={profile.bio ?? ""} onChange={e => setProfile({ ...profile, bio: e.target.value })} rows={3} maxLength={300}
+              <textarea value={profile.bio ?? ""} onChange={e => patch({ bio: e.target.value })} rows={3} maxLength={300}
                         className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border resize-none" />
             </Field>
           </Section>
@@ -191,13 +262,13 @@ function Dashboard() {
           {/* Integrations */}
           <Section title="// INTEGRATIONS">
             <Field label="Discord ID (for Lanyard live status)">
-              <input value={profile.discord_id ?? ""} onChange={e => setProfile({ ...profile, discord_id: e.target.value })}
+              <input value={profile.discord_id ?? ""} onChange={e => patch({ discord_id: e.target.value })}
                      placeholder="e.g. 156114103033790464"
                      className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border font-mono" />
               <p className="text-xs text-muted-foreground mt-1">Join discord.gg/lanyard for live status to work.</p>
             </Field>
             <Field label="Roblox profile URL">
-              <input value={profile.roblox_url ?? ""} onChange={e => setProfile({ ...profile, roblox_url: e.target.value })}
+              <input value={profile.roblox_url ?? ""} onChange={e => patch({ roblox_url: e.target.value })}
                      placeholder="https://roblox.com/users/123/profile"
                      className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
             </Field>
@@ -206,7 +277,7 @@ function Dashboard() {
           {/* Music */}
           <Section title="// MUSIC">
             <Field label="Track title">
-              <input value={profile.music_title ?? ""} onChange={e => setProfile({ ...profile, music_title: e.target.value })}
+              <input value={profile.music_title ?? ""} onChange={e => patch({ music_title: e.target.value })}
                      className="w-full bg-input rounded-md px-3 py-2 text-sm border border-border" />
             </Field>
             <Field label="Audio URL or upload">
@@ -247,26 +318,67 @@ function Dashboard() {
 
         {/* Customization sidebar */}
         <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-          <Section title="// CUSTOMIZE">
+          <Section title="// COLORS">
             <Field label="Accent color">
-              <ColorRow value={profile.accent_color} onChange={c => setProfile({ ...profile, accent_color: c })} />
+              <ColorRow value={profile.accent_color} onChange={c => patch({ accent_color: c })} />
             </Field>
             <Field label="Secondary color">
-              <ColorRow value={profile.secondary_color} onChange={c => setProfile({ ...profile, secondary_color: c })} />
+              <ColorRow value={profile.secondary_color} onChange={c => patch({ secondary_color: c })} />
             </Field>
-            <Field label="Background effect">
-              <div className="grid grid-cols-3 gap-1.5">
-                {BG_OPTIONS.map(o => (
-                  <button key={o.id} onClick={() => setProfile({ ...profile, background_effect: o.id })}
-                          className={`rounded-md px-2 py-2 text-xs font-mono border transition-all ${
-                            profile.background_effect === o.id ? "border-primary glow-purple" : "border-border bg-input"}`}>
-                    {o.label}
-                  </button>
-                ))}
-              </div>
+          </Section>
+
+          <Section title="// LAYOUT & TYPE">
+            <Field label="Font">
+              <Pills options={FONT_OPTIONS} value={profile.font_family} onChange={v => patch({ font_family: v })} />
             </Field>
-            <Toggle label="Click burst" checked={profile.click_effect} onChange={v => setProfile({ ...profile, click_effect: v })} />
-            <Toggle label="Custom cursor" checked={profile.custom_cursor} onChange={v => setProfile({ ...profile, custom_cursor: v })} />
+            <Field label="Layout">
+              <Pills options={LAYOUT_OPTIONS} value={profile.layout_style} onChange={v => patch({ layout_style: v })} />
+            </Field>
+            <Field label="Avatar shape">
+              <Pills options={AVATAR_OPTIONS} value={profile.avatar_shape} onChange={v => patch({ avatar_shape: v })} />
+            </Field>
+            <Field label="Entry animation">
+              <Pills options={ANIM_OPTIONS} value={profile.entry_animation} onChange={v => patch({ entry_animation: v })} />
+            </Field>
+          </Section>
+
+          <Section title="// CARDS">
+            <Slider label={`Opacity · ${profile.card_opacity.toFixed(2)}`} min={0.1} max={0.95} step={0.05}
+                    value={profile.card_opacity} onChange={v => patch({ card_opacity: v })} />
+            <Slider label={`Blur · ${profile.card_blur}px`} min={0} max={40} step={2}
+                    value={profile.card_blur} onChange={v => patch({ card_blur: v })} />
+            <Toggle label="Glowing border" checked={profile.border_glow} onChange={v => patch({ border_glow: v })} />
+            <Toggle label="Tilt on hover" checked={profile.tilt_cards} onChange={v => patch({ tilt_cards: v })} />
+          </Section>
+
+          <Section title="// BACKGROUND">
+            <Field label="Effect">
+              <Pills options={BG_OPTIONS} value={profile.background_effect} onChange={v => patch({ background_effect: v })} />
+            </Field>
+            <label className="inline-flex items-center gap-2 glass-strong rounded-md px-3 py-2 text-sm cursor-pointer hover:glow-purple transition-shadow">
+              <Upload className="w-4 h-4" /> Upload image
+              <input type="file" accept="image/*" className="hidden"
+                     onChange={e => e.target.files?.[0] && uploadBackground(e.target.files[0])} />
+            </label>
+            {profile.background_image_url && (
+              <>
+                <Slider label={`Image opacity · ${profile.background_opacity.toFixed(2)}`} min={0.05} max={1} step={0.05}
+                        value={profile.background_opacity} onChange={v => patch({ background_opacity: v })} />
+                <button onClick={() => patch({ background_image_url: null })}
+                        className="text-xs text-destructive hover:underline">Remove image</button>
+              </>
+            )}
+          </Section>
+
+          <Section title="// EFFECTS">
+            <Toggle label="Click burst" checked={profile.click_effect} onChange={v => patch({ click_effect: v })} />
+            {profile.click_effect && (
+              <Field label="Click style">
+                <Pills options={CLICK_OPTIONS} value={profile.click_effect_style} onChange={v => patch({ click_effect_style: v })} />
+              </Field>
+            )}
+            <Toggle label="Custom cursor" checked={profile.custom_cursor} onChange={v => patch({ custom_cursor: v })} />
+            <Toggle label="Cursor trail" checked={profile.cursor_trail} onChange={v => patch({ cursor_trail: v })} />
           </Section>
 
           <button onClick={save} disabled={saving}
@@ -305,6 +417,29 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
         <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-4" : ""}`} />
       </span>
     </button>
+  );
+}
+function Pills({ options, value, onChange }: { options: { id: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(o => (
+        <button key={o.id} onClick={() => onChange(o.id)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-mono border transition-all ${
+                  value === o.id ? "border-primary glow-purple" : "border-border bg-input"}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+function Slider({ label, value, onChange, min, max, step }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number }) {
+  return (
+    <label className="block">
+      <div className="text-xs font-mono text-muted-foreground mb-1">{label}</div>
+      <input type="range" min={min} max={max} step={step} value={value}
+             onChange={e => onChange(parseFloat(e.target.value))}
+             className="w-full accent-primary" />
+    </label>
   );
 }
 function ColorRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
